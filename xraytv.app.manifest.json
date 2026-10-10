@@ -1,11 +1,11 @@
 {
   "id": "xraytv.app",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "web",
   "title": "Xray",
-  "ipkUrl": "https://github.com/ildarin22/xraytv/releases/download/v1.1.1/xraytv.app_1.1.1_arm.ipk",
+  "ipkUrl": "https://github.com/ildarin22/xraytv/releases/download/v1.1.2/xraytv.app_1.1.2_arm.ipk",
   "ipkHash": {
-    "sha256": "353a4afedd33da5dad2a8920a91a769c249c89e4f4eb2fb24dfe15e73679ca91"
+    "sha256": "7ec3911e9065da06564e6928249366c1262754930822cd52ff37ff99099091cd"
   },
-  "ipkSize": 13626956
+  "ipkSize": 13627320
 }
