@@ -7,6 +7,9 @@ APP=$(cd "$(dirname "$0")" && pwd)
 DATA=/media/developer/xraytv
 RUN=/tmp/xraytv
 HOOK=/var/lib/webosbrew/init.d/70-xraytv
+# exec Homebrew Channel передаёт команде свои дескрипторы, среди них сокеты шины webOS. Унаследовав их,
+# долгоживущий xray держит имя сервиса после его выхода, и Homebrew Channel перестаёт отвечать.
+for f in /proc/$$/fd/*; do n=${f##*/}; [ "$n" -gt 2 ] && eval "exec $n>&-"; done
 umask 077   # подписка, ключ и конфиг с ключом — только для root
 mkdir -p "$RUN"
 chmod 755 "$APP/xray" 2> /dev/null

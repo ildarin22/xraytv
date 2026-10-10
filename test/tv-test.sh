@@ -65,6 +65,8 @@ t_core() {
   check "boot без DISABLE запускает" '^ *1$' "rm -f $DATA/DISABLE; DELAY=1 sh $CTL boot; sleep 8; pidof xray | wc -w"
   check "reload меняет процесс" '^changed$' "A=\$(pidof xray); sh $CTL reload; B=\$(pidof xray); [ -n \"\$B\" ] && [ \"\$A\" != \"\$B\" ] && echo changed"
   check "start без ключа — понятная ошибка" 'ошибка: ключ не настроен' "sh $CTL stop >/dev/null; mv $DATA/key.json /tmp/xraytv/k; sh $CTL start; mv /tmp/xraytv/k $DATA/key.json"
+  # экран и автозапуск зовут xrayctl через exec Homebrew Channel (см. начало xrayctl)
+  check "start через exec Homebrew Channel: xray без дескрипторов сервиса" '^0$' "sh $CTL stop >/dev/null; L=/tmp/xraytv-exec.log; luna-send -i -f luna://org.webosbrew.hbchannel.service/exec '{\"command\":\"sh $CTL start\"}' > \$L 2>&1 & P=\$!; i=0; while [ \$i -lt 20 ] && ! grep -q returnValue \$L; do sleep 1; i=\$((i + 1)); done; kill \$P; rm -f \$L; X=\$(pidof xray) && ls -l /proc/\$X/fd | grep -c pmloglib"
 }
 
 t_key() {
