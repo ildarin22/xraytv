@@ -1,0 +1,11 @@
+{
+  "packages": [
+    {
+      "id": "xraytv.app",
+      "title": "Xray",
+      "iconUri": "https://raw.githubusercontent.com/ildarin22/xraytv/main/app/largeIcon.png",
+      "shortDescription": "YouTube через свой сервер Xray (VLESS Reality). Нужны рут и подписка на свой сервер.",
+      "manifestUrl": "https://raw.githubusercontent.com/ildarin22/xraytv/main/xraytv.app.manifest.json"
+    }
+  ]
+}

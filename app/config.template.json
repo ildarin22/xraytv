@@ -1,0 +1,53 @@
+{
+  "log": { "loglevel": "warning", "access": "none" },
+
+  "inbounds": [
+    {
+      "tag": "tun-in",
+      "port": 0,
+      "protocol": "tun",
+      "settings": {
+        "name": "xray0",
+        "mtu": 1500,
+        "gateway": ["172.19.0.1/30"],
+        "autoSystemRoutingTable": ["0.0.0.0/1", "128.0.0.0/2", "192.0.0.0/3"],
+        "autoOutboundsInterface": "__IFACE__"
+      },
+      "sniffing": { "enabled": true, "destOverride": ["http", "tls", "quic"], "routeOnly": true }
+    }
+  ],
+
+  "outbounds": [
+    { "tag": "direct", "protocol": "freedom" },
+    {
+      "tag": "proxy",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [{
+          "address": "__SERVER__", "port": 443,
+          "users": [{ "id": "__UUID__", "encryption": "none", "flow": "xtls-rprx-vision" }]
+        }]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "__SNI__", "fingerprint": "firefox",
+          "publicKey": "__PBK__", "shortId": "__SID__", "spiderX": "__SPX__"
+        }
+      }
+    },
+    { "tag": "block", "protocol": "blackhole" }
+  ],
+
+  "routing": {
+    "rules": [
+      { "ip": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"],
+        "outboundTag": "direct" },
+      { "network": "udp", "port": "443", "outboundTag": "block",
+        "domain": ["keyword:googlevideo", "keyword:youtube", "keyword:ytimg", "domain:youtu.be", "domain:ggpht.com"] },
+      { "outboundTag": "proxy",
+        "domain": ["keyword:googlevideo", "keyword:youtube", "keyword:ytimg", "domain:youtu.be", "domain:ggpht.com"] }
+    ]
+  }
+}

@@ -1,0 +1,132 @@
+#!/bin/sh
+# Управление Xray на ТВ (busybox sh). Вызывают: экран приложения через exec Homebrew Channel,
+# хук автозапуска (boot) и человек по SSH:
+#   sh xrayctl status | start | stop | reload | update-key | remove | boot
+#   echo <подписка> | sh xrayctl setup -
+APP=$(cd "$(dirname "$0")" && pwd)
+DATA=/media/developer/xraytv
+RUN=/tmp/xraytv
+HOOK=/var/lib/webosbrew/init.d/70-xraytv
+umask 077   # подписка, ключ и конфиг с ключом — только для root
+mkdir -p "$RUN"
+chmod 755 "$APP/xray" 2> /dev/null
+# devmode при загрузке делает chmod -R 777 /media/developer; /tmp/xraytv мог остаться от версии без umask
+chmod 700 "$DATA" "$RUN" 2> /dev/null; chmod 600 "$DATA"/* "$RUN"/* 2> /dev/null
+
+iface_of() { sed -n 's/^default .* dev \([^ ]*\).*/\1/p' | head -n 1; }
+iface() { ip route | iface_of; }
+running() { pidof xray > /dev/null; }
+
+kill_xray() {
+  killall xray 2> /dev/null
+  i=0
+  while running && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
+  ! running || { echo "ошибка: Xray не остановился" >&2; return 1; }
+}
+
+# Запустить, если ещё не запущен. Маршруты на xray0 ставит сам Xray и убирает при выходе.
+launch() {
+  running && return 0
+  [ -f "$DATA/key.json" ] || { echo "ошибка: ключ не настроен" >&2; return 1; }
+  IF=$(iface); i=0
+  while [ -z "$IF" ] && [ $i -lt 60 ]; do sleep 1; i=$((i + 1)); IF=$(iface); done
+  [ -n "$IF" ] || { echo "ошибка: нет сети, Xray не запущен" | tee "$RUN/xray.log" >&2; return 1; }
+  node "$APP/mkconfig.js" render "$APP/config.template.json" "$DATA/key.json" "$IF" > "$RUN/config.json" || return 1
+  setsid "$APP/xray" run -c "$RUN/config.json" > "$RUN/xray.log" 2>&1 < /dev/null &
+  sleep 2
+  running || { echo "ошибка: Xray не запустился, см. $RUN/xray.log" >&2; return 1; }
+}
+
+reload() {
+  [ -f "$DATA/key.json" ] && [ ! -f "$DATA/DISABLE" ] || return 0
+  kill_xray && launch
+}
+
+say() { echo "$1" | tee "$DATA/update.log"; }   # итог последнего обновления ключа
+youtube_ok() { curl -s -o /dev/null -m 5 -w '%{http_code}' https://www.youtube.com/generate_204 2> /dev/null | grep -q '^[23]'; }
+
+# Подписка → новый ключ. Старый ключ заменяется только после «xray -test».
+update_key() {
+  mkdir -p "$DATA"
+  [ -s "$DATA/subscription.url" ] || { say "ошибка: нет ссылки на подписку" >&2; return 1; }
+  URL=$(cat "$DATA/subscription.url")
+  HOST=$(echo "$URL" | sed -n 's#^[a-z]*://\([^/:?]*\).*#\1#p')
+  # хост подписки не попадает под правила YouTube → запрос идёт напрямую, даже если прокси мёртв
+  curl -fsS -m 15 -o "$RUN/sub.txt" "$URL" 2> "$RUN/err" ||
+    { say "ошибка: подписка недоступна ($(head -c 120 "$RUN/err"))" >&2; return 1; }
+  IP=$(node "$APP/mkconfig.js" resolve "$HOST" 2> /dev/null)
+  node "$APP/mkconfig.js" parse "$RUN/sub.txt" "$HOST" "$IP" > "$RUN/key.new" 2> "$RUN/err" ||
+    { say "$(cat "$RUN/err")" >&2; return 1; }
+  { node "$APP/mkconfig.js" render "$APP/config.template.json" "$RUN/key.new" eth0 > "$RUN/test.json" &&
+    "$APP/xray" run -test -c "$RUN/test.json" > /dev/null 2>&1; } ||
+    { say "ошибка: новый ключ не прошёл проверку xray, оставлен старый" >&2; return 1; }
+  # Подписка раздаёт случайный sid из списка сервера: ключ, который отличается только sid, — прежний.
+  # Новый sid берём, лишь когда Xray запущен, а YouTube не отвечает (сервер мог сменить список),
+  # и key.prev.json при этом не трогаем: в нём остаётся предыдущий настоящий ключ.
+  if [ -f "$DATA/key.json" ] && [ "$(grep -v '"sid":' "$RUN/key.new")" = "$(grep -v '"sid":' "$DATA/key.json")" ]; then
+    if [ "$(cat "$RUN/key.new")" = "$(cat "$DATA/key.json")" ] || ! running || youtube_ok; then
+      say "ключ не изменился"; return 0
+    fi
+  elif [ -f "$DATA/key.json" ]; then
+    cp "$DATA/key.json" "$DATA/key.prev.json"
+  fi
+  cp "$RUN/key.new" "$DATA/key.json.tmp" && mv "$DATA/key.json.tmp" "$DATA/key.json"
+  say "ключ обновлён"
+  [ "$1" = noreload ] || reload
+}
+
+json_lines() {  # строки stdin → "a","b" (управляющие символы убраны, кавычки и \ экранированы)
+  tr -d '\000-\011\013-\037' | sed 's/\\/\\\\/g; s/"/\\"/g' | awk 'NR > 1 { printf "," } { printf "\"%s\"", $0 }'
+}
+
+status() {
+  EN=true; [ -f "$DATA/DISABLE" ] && EN=false
+  RU=false; running && RU=true
+  IF=$(iface)
+  # к какому интерфейсу привязан запущенный Xray (после смены кабель ↔ Wi-Fi не совпадёт с IF)
+  XIF=""; running && XIF=$(sed -n 's/.*"autoOutboundsInterface": *"\([^"]*\)".*/\1/p' "$RUN/config.json" 2> /dev/null | head -n 1)
+  HOSTP=""; PORT=0; KEYT=null; SOK=false; SMS=0
+  if [ -f "$DATA/key.json" ]; then
+    HOSTP=$(node "$APP/mkconfig.js" get "$DATA/key.json" address)
+    PORT=$(node "$APP/mkconfig.js" get "$DATA/key.json" port)
+    KEYT="\"$(date -u -r "$DATA/key.json" +%Y-%m-%dT%H:%M:%SZ)\""
+  fi
+  # сервер: TCP напрямую через активный интерфейс, мимо TUN
+  if [ -n "$HOSTP" ] && [ -n "$IF" ]; then
+    SMS=$(curl -s -o /dev/null -m 4 --interface "$IF" -w '%{time_connect}' "http://$HOSTP:$PORT/" 2> /dev/null |
+      awk '{ printf "%d", $1 * 1000 }')
+    [ "${SMS:-0}" -gt 0 ] && SOK=true
+  fi
+  # YouTube обычным путём: при работающем Xray — через прокси
+  R=$(curl -s -o /dev/null -m 5 -w '%{http_code} %{time_total}' https://www.youtube.com/generate_204 2> /dev/null)
+  YOK=false; case "${R%% *}" in 2??|3??) YOK=true ;; esac
+  YMS=$(echo "$R" | awk '{ printf "%d", $2 * 1000 }')
+  ERRS=$( { grep -iE 'error|warning|ошибка' "$RUN/xray.log" 2> /dev/null | grep -v ' started$' | tail -n 3
+            grep 'ошибка' "$DATA/update.log" 2> /dev/null; } | json_lines)
+  printf '{"enabled":%s,"running":%s,"iface":"%s","xrayIface":"%s","server":{"host":"%s","port":%s,"ok":%s,"ms":%s},"youtube":{"ok":%s,"ms":%s},"keyUpdated":%s,"errors":[%s]}\n' \
+    "$EN" "$RU" "$IF" "$XIF" "$HOSTP" "${PORT:-0}" "$SOK" "${SMS:-0}" "$YOK" "${YMS:-0}" "$KEYT" "$ERRS"
+}
+
+case "$1" in
+  start)  mkdir -p "$DATA"; rm -f "$DATA/DISABLE"; launch && echo "Xray включён" ;;
+  stop)   mkdir -p "$DATA"; touch "$DATA/DISABLE"; kill_xray && echo "Xray выключен" ;;
+  reload) reload ;;
+  boot)   [ -f "$DATA/DISABLE" ] && exit 0
+          setsid sh -c "sleep ${DELAY:-25}; exec sh '$APP/xrayctl' _boot" > /dev/null 2>&1 < /dev/null & ;;
+  _boot)  [ -f "$DATA/DISABLE" ] || launch ;;
+  _iface) iface_of ;;
+  update-key) update_key ;;
+  status) status ;;
+  setup)  [ "$2" = - ] || { echo "использование: echo <подписка> | sh xrayctl setup -" >&2; exit 1; }
+          # подписка и ключ к ней собираются рядом, в папку данных попадают только при успехе.
+          # ponytail: имя .setup одно на всех, два setup разом мешают друг другу; экран блокирует кнопки
+          NEW=$DATA/.setup; rm -rf "$NEW"; mkdir -p "$NEW"
+          cp -p "$DATA/key.json" "$DATA/key.prev.json" "$NEW" 2> /dev/null
+          read -r U; printf '%s\n' "$U" > "$NEW/subscription.url"
+          (DATA=$NEW; update_key noreload) || { rm -rf "$NEW"; exit 1; }
+          mv "$NEW"/* "$DATA" && rmdir "$NEW" || { echo "ошибка: не удалось сохранить подписку" >&2; exit 1; }
+          chmod 755 "$APP/autostart.sh"; ln -sf "$APP/autostart.sh" "$HOOK"
+          rm -f "$DATA/DISABLE"; kill_xray && launch && echo "Xray включён" ;;
+  remove) kill_xray; rm -f "$HOOK"; rm -rf "$DATA" "$RUN"; echo "удалено: автозапуск и данные" ;;
+  *)     sed -n '2,5p' "$0"; exit 1 ;;
+esac

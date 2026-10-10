@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Xray</title>
+<style>
+  body { margin: 0; background: #101418; color: #e8eaed; font-family: sans-serif; font-size: 30px; }
+  main { padding: 60px 90px; }
+  header { display: flex; justify-content: space-between; font-size: 44px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+  .green { color: #4caf50; } .yellow { color: #ffc107; } .red { color: #f44336; }
+  #state { display: flex; align-items: center; }
+  .icon { width: 44px; height: 44px; margin-right: 14px; fill: none; stroke: currentColor; stroke-width: 3;
+          stroke-linecap: round; stroke-linejoin: round; }
+  .spin { color: #9aa0a6; animation: spin 0.9s linear infinite; }
+  .mark { stroke-dasharray: 30; stroke-dashoffset: 30; animation: draw 0.4s 0.1s ease-out forwards; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  table { margin-top: 30px; border-collapse: collapse; }
+  td { padding: 10px 50px 10px 0; }
+  td:first-child { color: #9aa0a6; }
+  #errors { margin-top: 30px; color: #9aa0a6; font-size: 24px; white-space: pre-wrap; }
+  #msg { margin-top: 20px; min-height: 40px; color: #ffc107; }
+  nav { margin-top: 30px; }
+  button, input { font-size: 30px; padding: 16px 36px; margin-right: 24px; background: #2a2f36; color: #e8eaed;
+                  border: 3px solid transparent; border-radius: 10px; }
+  input { width: 900px; padding: 16px 20px; outline: none; }
+  .focus { border-color: #fff; background: #3b4450; }
+  #sub { margin-top: 30px; }
+</style>
+</head>
+<body>
+<main>
+  <header><span>Xray</span><span id="state"></span></header>
+  <table id="rows"></table>
+  <div id="errors"></div>
+  <div id="msg"></div>
+  <nav id="nav"><button id="b-check">Проверить ещё раз</button><button id="b-toggle">Выключить</button><button id="b-key">Обновить ключ</button><button id="b-sub">Ввести подписку</button></nav>
+  <div id="sub" hidden><input id="sub-url" aria-label="Подписка" type="url" autocomplete="off" spellcheck="false" placeholder="https://…/sub/…"><button id="b-save">Сохранить</button><button id="b-cancel">Отмена</button></div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
