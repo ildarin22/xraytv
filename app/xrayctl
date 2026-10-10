@@ -94,9 +94,11 @@ status() {
     PORT=$(node "$APP/mkconfig.js" get "$DATA/key.json" port)
     KEYT="\"$(date -u -r "$DATA/key.json" +%Y-%m-%dT%H:%M:%SZ)\""
   fi
-  # сервер: TCP напрямую через активный интерфейс, мимо TUN
+  # сервер: только TCP-соединение напрямую через активный интерфейс, мимо TUN. telnet:// не шлёт ни байта
+  # (открытый HTTP на порт Reality выделялся бы для DPI), но ждёт до -m.
+  # ponytail: -m 1 — RTT больше 1 с или потерянный SYN (повтор через 1 с) покажут «не отвечает»
   if [ -n "$HOSTP" ] && [ -n "$IF" ]; then
-    SMS=$(curl -s -o /dev/null -m 4 --interface "$IF" -w '%{time_connect}' "http://$HOSTP:$PORT/" 2> /dev/null |
+    SMS=$(curl -s -o /dev/null -m 1 --interface "$IF" -w '%{time_connect}' "telnet://$HOSTP:$PORT" < /dev/null 2> /dev/null |
       awk '{ printf "%d", $1 * 1000 }')
     [ "${SMS:-0}" -gt 0 ] && SOK=true
   fi
