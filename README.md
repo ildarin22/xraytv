@@ -9,7 +9,10 @@
 
 ## Что нужно
 
-- ТВ с рутом через [rootmy.tv](https://rootmy.tv) и установленным им Homebrew Channel;
+- ТВ с рутом через [rootmy.tv](https://rootmy.tv) и Homebrew Channel **0.7.0 или новее**: старые версии
+  не доверяют сертификату GitHub, и установка падает с `unable to get local issuer certificate`.
+  Обновить старый Homebrew Channel кнопкой «Update» нельзя по той же причине — его ставят заново через rootmy.tv
+  или по SSH;
 - ссылка подписки вашего сервера Xray, которая отдаёт ссылку `vless://` с Reality.
 
 ## Установка на ТВ
